@@ -1,9 +1,13 @@
 import os
 
 from db import db
-from flask import Flask
+from flask import Flask, request, redirect, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, join_room, leave_room, send, emit
+from flask_admin import Admin
+from flask_admin.contrib import sqla
+from flask_basicauth import BasicAuth
+from werkzeug.exceptions import HTTPException
 
 # from utils.parser import ReqParser
 
@@ -18,6 +22,11 @@ socketio = SocketIO(app)
 """
 till here
 """
+app.config['BASIC_AUTH_USERNAME'] = 'mark'
+app.config['BASIC_AUTH_PASSWORD'] = 'mark'
+basic_auth = BasicAuth(app)
+admin = Admin(app, name="niche", template_mode='bootstrap3')
+CORS(app)
 
 if __name__ == '__main__':
     CORS(app)
@@ -30,18 +39,48 @@ def hello_world():
 def check_room():
     return RoomView.check_room()
 
-# @socketio.on('join')
-# def on_join(data):
-#     req_params = ["username", "room"]
-#     if not ReqParser.check_body(data, req_params):
-#         emit('error', {"error_message": 'invalid params'}, json=True)
-#     username = data['username']
-#     room = data['room']
-#     join_room(room)
-#     old_messages = MessageController.get_old_messages(room)
-#     emit("joined_room", old_messages)
-#     joined_notify = MessageController.new_message("Admin", room, username + " has entered the room.")
-#     emit("new_message", joined_notify, room=room)
+@app.route('/makeroom', methods=['POST']) 
+def make_room():
+    return RoomView.make_room()
+
+@app.route('/makeentry', methods=['POST']) 
+def make_room():
+    return RoomView.make_entry()
+
+@socketio.on('join')
+def on_join(data):
+    req_params = ["username", "room"]
+    if not ReqParser.check_body(data, req_params):
+        emit('error', {"error_message": 'invalid params'}, json=True)
+    username = data['username']
+    room = data['room']
+    error, status = RoomController.check_room(room)
+    if error:
+        emit("error", error)
+    join_room(room)
+    error, status = RoomController.join_room(room, username)
+    if error:
+        emit("error", error)
+    error, entries = EntryController.for_room(room)
+    if error:
+        emit("error", error)
+    print('hi')
+    emit("joined_room", entries)
+
+@socketio.on('new_entry')
+def on_new_entry(data):
+    req_params = ["username", "room"]
+    if not ReqParser.check_body(data, req_params):
+        emit('error', {"error_message": 'invalid params'}, json=True)
+    username = data['username']
+    room = data['room']
+    error, status = RoomController.check_room(room)
+    if error:
+        emit("error", error)
+    error, entry = EntryController.new_entry(room, username)
+    if error:
+        emit("error", error)
+    emit("got_new", entry, room=room)
 
 # @socketio.on('leave')
 # def on_leave(data):
@@ -51,7 +90,46 @@ def check_room():
 #     username = data['username']
 #     room = data['room']
 #     leave_room(room)
-#     emit("new_message", username + ' has left the room.', room=room)
+#     delete user by username
+from models.MemberModel import MemberModel
+from models.EntryModel import EntryModel
+from models.RoomModel import RoomModel
+
+class ModelView(sqla.ModelView):
+    def is_accessible(self):
+        if not basic_auth.authenticate():
+            raise AuthException('Not authenticated.')
+        else:
+            return True
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(basic_auth.challenge())
+
+class AuthException(HTTPException):
+    def __init__(self, message):
+        super().__init__(message, Response(
+            "You could not be authenticated. Please refresh the page.", 401,
+            {'WWW-Authenticate': 'Basic realm="Login Required"'}
+        ))
+
+class EntryAdminView(ModelView):
+    column_list = ['id', 'member', 'room']
+    column_filters = ['id', 'member', 'room']
+    column_default_sort = ('id', True)
+
+class MemberAdminView(ModelView):
+    column_list = ['id', 'name', 'room', 'privilege']
+    column_filters = ['id', 'name', 'room']
+    column_default_sort = ('id', True)
+
+class RoomAdminView(ModelView):
+    column_list = ['id', 'name']
+    column_filters = ['id', 'name']
+    column_default_sort = ('id', True) 
+
+admin.add_view(EntryAdminView(EntryModel, db.session))
+admin.add_view(MemberAdminView(MemberModel, db.session))
+admin.add_view(RoomAdminView(RoomModel, db.session))
+
 
 if __name__ == '__main__':
     db.init_app(app)

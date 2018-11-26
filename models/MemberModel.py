@@ -10,8 +10,13 @@ class MemberModel(db.Model, BaseModel):
     date_created = db.Column(db.DateTime, default=db.func.current_timestamp())
     name = db.Column(db.String(255))
 
-    def __init__(self, name):
+    privilege = db.Column(db.Integer)
+    room = db.Column(db.Integer, db.ForeignKey('room.id'))
+
+    def __init__(self, name, privilege, room):
         self.name = name
+        self.privilege = privilege
+        self.room = room
         
 
     @classmethod
