@@ -21,4 +21,16 @@ class EntryController:
             return '', new_entry.json()
         else:
             return "Invalid Room Name", None
+    
+    @classmethod
+    def delete_entry(cls, entry_id):
+        target = EntryModel.find_by_id(entry_id)
+        if target:
+            target.delete_from_db()
+            return ''
+        else:
+            return "Can't find entry"
+            
+
+    
 

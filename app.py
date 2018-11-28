@@ -13,6 +13,11 @@ from werkzeug.exceptions import HTTPException
 
 from views.RoomView import RoomView
 
+from controllers.RoomController import RoomController
+from controllers.EntryController import EntryController
+
+from utils.parser import ReqParser
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///localdata.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -25,7 +30,7 @@ till here
 app.config['BASIC_AUTH_USERNAME'] = 'mark'
 app.config['BASIC_AUTH_PASSWORD'] = 'mark'
 basic_auth = BasicAuth(app)
-admin = Admin(app, name="niche", template_mode='bootstrap3')
+admin = Admin(app, name="orange", template_mode='bootstrap3')
 CORS(app)
 
 if __name__ == '__main__':
@@ -43,10 +48,6 @@ def check_room():
 def make_room():
     return RoomView.make_room()
 
-@app.route('/makeentry', methods=['POST']) 
-def make_room():
-    return RoomView.make_entry()
-
 @socketio.on('join')
 def on_join(data):
     req_params = ["username", "room"]
@@ -56,16 +57,14 @@ def on_join(data):
     room = data['room']
     error, status = RoomController.check_room(room)
     if error:
-        emit("error", error)
-    join_room(room)
+        send("error", error)
     error, status = RoomController.join_room(room, username)
     if error:
-        emit("error", error)
+        send("error", error)
+    else:
+        join_room(room)
     error, entries = EntryController.for_room(room)
-    if error:
-        emit("error", error)
-    print('hi')
-    emit("joined_room", entries)
+    emit("all_entries", entries, room=room)
 
 @socketio.on('new_entry')
 def on_new_entry(data):
@@ -81,6 +80,22 @@ def on_new_entry(data):
     if error:
         emit("error", error)
     emit("got_new", entry, room=room)
+
+@socketio.on('delete_entry')
+def delete_entry(data):
+    req_params = ["username", "room", "target"]
+    if not ReqParser.check_body(data, req_params):
+        emit('error', {"error_message": 'invalid params'}, json=True)
+    username = data['username']
+    room = data['room']
+    target = data['target']
+    error = EntryController.delete_entry(target)
+    if error:
+        emit("error", error)
+    error, response = RoomController.for_room(room)
+    if error:
+        emit("error", error)
+    emit("all_entries", response, room=room)
 
 # @socketio.on('leave')
 # def on_leave(data):

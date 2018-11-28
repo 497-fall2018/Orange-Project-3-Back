@@ -21,9 +21,7 @@ class EntryModel(db.Model, BaseModel):
             "id": self.id,
             "room": self.room,
             "member": self.member,
-            "date_created": self.date_created,
         }
-        
 
     @classmethod
     def find_by_member(cls, member):
