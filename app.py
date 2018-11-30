@@ -92,7 +92,7 @@ def delete_entry(data):
     error = EntryController.delete_entry(target)
     if error:
         emit("error", error)
-    error, response = RoomController.for_room(room)
+    error, response = EntryController.for_room(room)
     if error:
         emit("error", error)
     emit("all_entries", response, room=room)
